@@ -1,40 +1,37 @@
-import gradio as gr
+import streamlit as st
 from ultralytics import YOLO
+import requests
 import base64
 import os
-import requests
 
 # ---------------------------
-# Secure Webhook
+# CONFIG
 # ---------------------------
+st.set_page_config(page_title="Wildlife System", layout="wide")
+
 PABBLY_WEBHOOK_URL = os.getenv("PABBLY_WEBHOOK_URL")
 
-# ---------------------------
-# Load Model (Detection)
-# ---------------------------
 model = YOLO("yolov8n.pt")
 
 animal_name_hi = {
     "elephant": "हाथी",
     "bear": "भालू",
-    "zebra": "ज़ेब्रा",
-    "giraffe": "जिराफ",
     "dog": "कुत्ता",
     "cat": "बिल्ली"
 }
 
 # ---------------------------
-# Alert Function
+# ALERT FUNCTION
 # ---------------------------
-def send_alert(message):
+def send_alert(msg):
     try:
         if PABBLY_WEBHOOK_URL:
-            requests.post(PABBLY_WEBHOOK_URL, json={"message": message}, timeout=5)
+            requests.post(PABBLY_WEBHOOK_URL, json={"message": msg})
     except:
         pass
 
 # ---------------------------
-# Audio
+# AUDIO
 # ---------------------------
 def get_audio():
     if os.path.exists("alert.mp3"):
@@ -43,111 +40,98 @@ def get_audio():
     return ""
 
 # ---------------------------
-# Detection Function
+# DETECTION
 # ---------------------------
-def detect(image):
-    if image is None:
-        return "Upload image first"
-
-    results = model.predict(source=image, conf=0.4)
+def detect(image_path):
+    results = model.predict(source=image_path)
     r = results[0]
 
     if len(r.boxes) == 0:
-        return "❌ No animal detected"
+        return None, None, None
 
-    cls_id = int(r.boxes.cls[0])
+    cls = int(r.boxes.cls[0])
     conf = float(r.boxes.conf[0]) * 100
 
-    animal_en = model.names[cls_id]
+    animal_en = model.names[cls]
     animal_hi = animal_name_hi.get(animal_en, animal_en)
 
     if conf > 70:
         send_alert(f"ALERT: {animal_en} {conf:.1f}%")
 
-    audio = get_audio()
-
-    color = "green" if conf > 80 else "orange" if conf > 50 else "red"
-
-    return f"""
-    <div style='padding:20px;border-radius:15px;border:3px solid {color};background:#f9fafb;text-align:center;'>
-        <h2 style='color:{color};'>⚠️ {animal_en.upper()}</h2>
-        <p>Confidence: <b>{conf:.1f}%</b></p>
-        <p style='font-size:18px;background:#e0f2fe;padding:10px;border-radius:10px;'>
-        हिन्दी: यह <b>{animal_hi}</b> हो सकता है
-        </p>
-        <audio controls autoplay src='data:audio/mpeg;base64,{audio}'></audio>
-    </div>
-    """
+    return animal_en, animal_hi, conf
 
 # ---------------------------
-# Awareness Section
+# UI HEADER
 # ---------------------------
-awareness_html = """
-<h2 style='text-align:center;color:#6b21a8;'>🌿 Human-Animal Conflict Awareness</h2>
-<div style='display:flex;flex-wrap:wrap;gap:15px;justify-content:center;'>
-<div style='background:#fde68a;padding:15px;border-radius:10px;'>Water holes in forest</div>
-<div style='background:#a7f3d0;padding:15px;border-radius:10px;'>Plant native trees</div>
-<div style='background:#fca5a5;padding:15px;border-radius:10px;'>Buffer zones</div>
-<div style='background:#c7d2fe;padding:15px;border-radius:10px;'>Waste management</div>
-<div style='background:#fde68a;padding:15px;border-radius:10px;'>Solar lights</div>
-<div style='background:#a7f3d0;padding:15px;border-radius:10px;'>Protect livestock</div>
-</div>
-"""
+st.markdown("<h1 style='text-align:center;color:#1e3a8a;'>🐾 Wildlife Protection System</h1>", unsafe_allow_html=True)
+
+tab1, tab2, tab3 = st.tabs(["🔍 Detection", "🌿 Awareness", "🧠 Quiz"])
 
 # ---------------------------
-# Quiz Data
+# TAB 1: DETECTION
 # ---------------------------
-quiz_q = [
-    ("Best way to reduce conflict?", ["Water", "Trees", "All"], 2),
-    ("Who handles wildlife in India?", ["Police", "Forest Dept", "School"], 1),
-]
+with tab1:
+    uploaded = st.file_uploader("Upload Image", type=["jpg","png","jpeg"])
+
+    if uploaded:
+        with open("temp.jpg","wb") as f:
+            f.write(uploaded.read())
+
+        st.image("temp.jpg")
+
+        with st.spinner("Detecting..."):
+            animal_en, animal_hi, conf = detect("temp.jpg")
+
+        if animal_en:
+            color = "green" if conf>80 else "orange" if conf>50 else "red"
+
+            st.markdown(f"""
+            <div style='padding:20px;border:3px solid {color};border-radius:10px;'>
+            <h2 style='color:{color};'>⚠️ {animal_en.upper()}</h2>
+            <p>Confidence: {conf:.1f}%</p>
+            <p>हिन्दी: {animal_hi}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.audio("alert.mp3")
+
+        else:
+            st.error("No detection")
 
 # ---------------------------
-# Quiz Function
+# TAB 2: AWARENESS
 # ---------------------------
-def quiz(name, q1, q2):
-    score = 0
-    if q1 == "All": score += 1
-    if q2 == "Forest Dept": score += 1
+with tab2:
+    st.markdown("## 🌿 Human-Animal Conflict Awareness")
 
-    return f"""
-    <div style='padding:20px;background:#ecfeff;border-radius:10px;text-align:center;'>
-        <h2>🎉 {name} Score: {score}/2</h2>
-    </div>
-    """
+    cols = st.columns(3)
+
+    tips = [
+        "Water holes in forest",
+        "Plant trees",
+        "Buffer zone",
+        "Waste management",
+        "Solar lights",
+        "Protect animals"
+    ]
+
+    for i, tip in enumerate(tips):
+        cols[i%3].info(tip)
 
 # ---------------------------
-# UI Layout
+# TAB 3: QUIZ
 # ---------------------------
-with gr.Blocks(css="""
-body {background: linear-gradient(to right,#dbeafe,#f0fdf4);}
-""") as app:
+with tab3:
+    st.markdown("## 🧠 Quiz")
 
-    gr.Markdown("""
-    <h1 style='text-align:center;color:#1e3a8a;'>🐾 Wildlife Protection System</h1>
-    """)
+    name = st.text_input("Enter Name")
 
-    with gr.Tabs():
+    q1 = st.radio("Best method?", ["Water","Trees","All"])
+    q2 = st.radio("Who protects wildlife?", ["Police","Forest Dept","School"])
 
-        # -------- Detection --------
-        with gr.Tab("🔍 Detection + Alert"):
-            with gr.Row():
-                img = gr.Image(type="filepath")
-                out = gr.HTML()
-            btn = gr.Button("Detect")
-            btn.click(detect, img, out)
+    if st.button("Submit"):
+        score = 0
+        if q1=="All": score+=1
+        if q2=="Forest Dept": score+=1
 
-        # -------- Awareness --------
-        with gr.Tab("🌿 Awareness"):
-            gr.HTML(awareness_html)
-
-        # -------- Quiz --------
-        with gr.Tab("🧠 Quiz"):
-            name = gr.Textbox(label="Your Name")
-            q1 = gr.Radio(["Water","Trees","All"], label="Q1")
-            q2 = gr.Radio(["Police","Forest Dept","School"], label="Q2")
-            btn2 = gr.Button("Submit")
-            result = gr.HTML()
-            btn2.click(quiz, [name,q1,q2], result)
-
-app.launch()
+        st.success(f"{name} Score: {score}/2")
