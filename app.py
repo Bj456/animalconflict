@@ -1,117 +1,153 @@
-import streamlit as st
+import gradio as gr
 from ultralytics import YOLO
-import requests
+import base64
 import os
+import requests
 
 # ---------------------------
-# Pabbly Webhook Configuration
+# Secure Webhook
 # ---------------------------
-PABBLY_WEBHOOK_URL = "https://connect.pabbly.com/workflow/sendwebhookdata/IjU3NjcwNTZkMDYzZjA0M2M1MjZjNTUzNDUxMzAi_pc"
-
-def send_alert_via_pabbly(message: str):
-    try:
-        response = requests.post(PABBLY_WEBHOOK_URL, json={"message": message}, timeout=10)
-        response.raise_for_status()
-        st.success("✅ Alert sent via Pabbly!")
-    except requests.exceptions.RequestException as e:
-        st.error(f"⚠️ Failed to send alert via Pabbly: {e}")
+PABBLY_WEBHOOK_URL = os.getenv("PABBLY_WEBHOOK_URL")
 
 # ---------------------------
-# Load YOLO Model
+# Load Model (Detection)
 # ---------------------------
-@st.cache_resource
-def load_model():
-    return YOLO("yolov8n-cls.pt")
+model = YOLO("yolov8n.pt")
 
-model = load_model()
-
-# ---------------------------
-# Hindi Names
-# ---------------------------
 animal_name_hi = {
-    "brown_bear": "भालू",
-    "tiger": "शेर",
     "elephant": "हाथी",
-    "leopard": "चीता",
-    "wolf": "भेड़िया"
+    "bear": "भालू",
+    "zebra": "ज़ेब्रा",
+    "giraffe": "जिराफ",
+    "dog": "कुत्ता",
+    "cat": "बिल्ली"
 }
 
 # ---------------------------
-# Prediction Function
+# Alert Function
 # ---------------------------
-def predict(image_path):
-    results = model.predict(source=image_path, verbose=False, save=True, project="runs", name="detect")
-    result = results[0]
+def send_alert(message):
+    try:
+        if PABBLY_WEBHOOK_URL:
+            requests.post(PABBLY_WEBHOOK_URL, json={"message": message}, timeout=5)
+    except:
+        pass
 
-    if result.probs is None:
-        return None, None, None
+# ---------------------------
+# Audio
+# ---------------------------
+def get_audio():
+    if os.path.exists("alert.mp3"):
+        with open("alert.mp3", "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    return ""
 
-    pred_class = result.probs.top1
-    conf = result.probs.top1conf.item() * 100
+# ---------------------------
+# Detection Function
+# ---------------------------
+def detect(image):
+    if image is None:
+        return "Upload image first"
 
-    animal_en = result.names[pred_class]
+    results = model.predict(source=image, conf=0.4)
+    r = results[0]
+
+    if len(r.boxes) == 0:
+        return "❌ No animal detected"
+
+    cls_id = int(r.boxes.cls[0])
+    conf = float(r.boxes.conf[0]) * 100
+
+    animal_en = model.names[cls_id]
     animal_hi = animal_name_hi.get(animal_en, animal_en)
 
-    # Send alert
-    alert_message = f"🐾 ALERT: {animal_en.upper()} detected with confidence {conf:.1f}%"
-    send_alert_via_pabbly(alert_message)
+    if conf > 70:
+        send_alert(f"ALERT: {animal_en} {conf:.1f}%")
 
-    return animal_en, animal_hi, conf
+    audio = get_audio()
+
+    color = "green" if conf > 80 else "orange" if conf > 50 else "red"
+
+    return f"""
+    <div style='padding:20px;border-radius:15px;border:3px solid {color};background:#f9fafb;text-align:center;'>
+        <h2 style='color:{color};'>⚠️ {animal_en.upper()}</h2>
+        <p>Confidence: <b>{conf:.1f}%</b></p>
+        <p style='font-size:18px;background:#e0f2fe;padding:10px;border-radius:10px;'>
+        हिन्दी: यह <b>{animal_hi}</b> हो सकता है
+        </p>
+        <audio controls autoplay src='data:audio/mpeg;base64,{audio}'></audio>
+    </div>
+    """
 
 # ---------------------------
-# Streamlit UI
+# Awareness Section
 # ---------------------------
-st.set_page_config(page_title="Wildlife Detection System", layout="wide")
+awareness_html = """
+<h2 style='text-align:center;color:#6b21a8;'>🌿 Human-Animal Conflict Awareness</h2>
+<div style='display:flex;flex-wrap:wrap;gap:15px;justify-content:center;'>
+<div style='background:#fde68a;padding:15px;border-radius:10px;'>Water holes in forest</div>
+<div style='background:#a7f3d0;padding:15px;border-radius:10px;'>Plant native trees</div>
+<div style='background:#fca5a5;padding:15px;border-radius:10px;'>Buffer zones</div>
+<div style='background:#c7d2fe;padding:15px;border-radius:10px;'>Waste management</div>
+<div style='background:#fde68a;padding:15px;border-radius:10px;'>Solar lights</div>
+<div style='background:#a7f3d0;padding:15px;border-radius:10px;'>Protect livestock</div>
+</div>
+"""
 
-st.markdown("<h1 style='text-align:center;'>🐾 Wildlife Detection System 2026</h1>", unsafe_allow_html=True)
+# ---------------------------
+# Quiz Data
+# ---------------------------
+quiz_q = [
+    ("Best way to reduce conflict?", ["Water", "Trees", "All"], 2),
+    ("Who handles wildlife in India?", ["Police", "Forest Dept", "School"], 1),
+]
 
-tab1, tab2 = st.tabs(["📷 Upload Photo", "🎥 Live Camera"])
+# ---------------------------
+# Quiz Function
+# ---------------------------
+def quiz(name, q1, q2):
+    score = 0
+    if q1 == "All": score += 1
+    if q2 == "Forest Dept": score += 1
 
-# ---- Tab 1: Upload Photo ----
-with tab1:
-    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
-    if uploaded_file is not None:
-        with open("temp.jpg", "wb") as f:
-            f.write(uploaded_file.read())
+    return f"""
+    <div style='padding:20px;background:#ecfeff;border-radius:10px;text-align:center;'>
+        <h2>🎉 {name} Score: {score}/2</h2>
+    </div>
+    """
 
-        st.image("temp.jpg", caption="Uploaded Image", use_column_width=True)
+# ---------------------------
+# UI Layout
+# ---------------------------
+with gr.Blocks(css="""
+body {background: linear-gradient(to right,#dbeafe,#f0fdf4);}
+""") as app:
 
-        animal_en, animal_hi, conf = predict("temp.jpg")
+    gr.Markdown("""
+    <h1 style='text-align:center;color:#1e3a8a;'>🐾 Wildlife Protection System</h1>
+    """)
 
-        if animal_en:
-            st.markdown(f"## ⚠️ ALERT: {animal_en.upper()}")
-            st.write(f"Confidence: **{conf:.1f}%**")
-            st.write(f"**हिन्दी:** यह {animal_hi} हो सकता है।")
+    with gr.Tabs():
 
-            st.audio("alert.mp3", autoplay=True)
+        # -------- Detection --------
+        with gr.Tab("🔍 Detection + Alert"):
+            with gr.Row():
+                img = gr.Image(type="filepath")
+                out = gr.HTML()
+            btn = gr.Button("Detect")
+            btn.click(detect, img, out)
 
-            # Show annotated detection result
-            det_path = "runs/detect/predict/temp.jpg"
-            if os.path.exists(det_path):
-                st.image(det_path, caption="Detection Result", use_column_width=True)
-        else:
-            st.error("❌ Detection failed.")
+        # -------- Awareness --------
+        with gr.Tab("🌿 Awareness"):
+            gr.HTML(awareness_html)
 
-# ---- Tab 2: Live Camera ----
-with tab2:
-    camera_input = st.camera_input("Take a snapshot")
-    if camera_input is not None:
-        with open("live.jpg", "wb") as f:
-            f.write(camera_input.getbuffer())
+        # -------- Quiz --------
+        with gr.Tab("🧠 Quiz"):
+            name = gr.Textbox(label="Your Name")
+            q1 = gr.Radio(["Water","Trees","All"], label="Q1")
+            q2 = gr.Radio(["Police","Forest Dept","School"], label="Q2")
+            btn2 = gr.Button("Submit")
+            result = gr.HTML()
+            btn2.click(quiz, [name,q1,q2], result)
 
-        st.image("live.jpg", caption="Live Snapshot", use_column_width=True)
-
-        animal_en, animal_hi, conf = predict("live.jpg")
-
-        if animal_en:
-            st.markdown(f"## ⚠️ ALERT: {animal_en.upper()}")
-            st.write(f"Confidence: **{conf:.1f}%**")
-            st.write(f"**हिन्दी:** यह {animal_hi} हो सकता है।")
-
-            st.audio("alert.mp3", autoplay=True)
-
-            det_path = "runs/detect/predict/live.jpg"
-            if os.path.exists(det_path):
-                st.image(det_path, caption="Detection Result", use_column_width=True)
-        else:
-            st.error("❌ Detection failed.")
+app.launch()
