@@ -61,22 +61,38 @@ def predict(image_path):
 # ---------------------------
 # Streamlit UI
 # ---------------------------
-st.title("🐾 Wildlife Detection System 2026")
+st.set_page_config(page_title="Wildlife Detection System", layout="wide")
+
+st.markdown("<h1 style='text-align:center;'>🐾 Wildlife Detection System 2026</h1>", unsafe_allow_html=True)
 
 uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
+    # Save temp file
     with open("temp.jpg", "wb") as f:
         f.write(uploaded_file.read())
 
+    # Show full image on screen
+    st.image("temp.jpg", caption="Uploaded Image", use_column_width=True)
+
+    # Run prediction
     animal_en, animal_hi, conf = predict("temp.jpg")
 
     if animal_en:
-        st.markdown(f"### ⚠️ ALERT: {animal_en.upper()}")
+        st.markdown(f"## ⚠️ ALERT: {animal_en.upper()}")
         st.write(f"Confidence: **{conf:.1f}%**")
         st.write(f"**हिन्दी:** यह {animal_hi} हो सकता है।")
 
-        # Play alarm
+        # Play alarm audio
         st.audio("alert.mp3", autoplay=True)
+
+        # Optional: Show detection video (if you want to display YOLO inference video)
+        # Save video output
+        model.predict(source="temp.jpg", save=True, project="runs", name="detect")
+        video_path = "runs/detect/predict/temp.jpg"  # YOLO saves annotated image/video
+
+        if os.path.exists(video_path):
+            st.image(video_path, caption="Detection Result", use_column_width=True)
+
     else:
         st.error("❌ Detection failed.")
