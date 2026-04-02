@@ -2,3 +2,4 @@ streamlit
 ultralytics
 requests
 opencv-python-headless
+gradio
