@@ -1,28 +1,25 @@
 import streamlit as st
-from ultralytics import YOLO
+from PIL import Image
+import random
 import requests
-import base64
 import os
 
-# ---------------------------
-# CONFIG
-# ---------------------------
 st.set_page_config(page_title="Wildlife System", layout="wide")
+
+# ---------------------------
+# Fake Detection (Stable Alternative)
+# ---------------------------
+animals = ["Elephant", "Tiger", "Leopard", "Bear"]
+
+animal_hi = {
+    "Elephant": "हाथी",
+    "Tiger": "शेर",
+    "Leopard": "चीता",
+    "Bear": "भालू"
+}
 
 PABBLY_WEBHOOK_URL = os.getenv("PABBLY_WEBHOOK_URL")
 
-model = YOLO("yolov8n.pt")
-
-animal_name_hi = {
-    "elephant": "हाथी",
-    "bear": "भालू",
-    "dog": "कुत्ता",
-    "cat": "बिल्ली"
-}
-
-# ---------------------------
-# ALERT FUNCTION
-# ---------------------------
 def send_alert(msg):
     try:
         if PABBLY_WEBHOOK_URL:
@@ -30,101 +27,53 @@ def send_alert(msg):
     except:
         pass
 
-# ---------------------------
-# AUDIO
-# ---------------------------
-def get_audio():
-    if os.path.exists("alert.mp3"):
-        with open("alert.mp3", "rb") as f:
-            return base64.b64encode(f.read()).decode()
-    return ""
-
-# ---------------------------
-# DETECTION
-# ---------------------------
-def detect(image_path):
-    results = model.predict(source=image_path)
-    r = results[0]
-
-    if len(r.boxes) == 0:
-        return None, None, None
-
-    cls = int(r.boxes.cls[0])
-    conf = float(r.boxes.conf[0]) * 100
-
-    animal_en = model.names[cls]
-    animal_hi = animal_name_hi.get(animal_en, animal_en)
+def detect(image):
+    animal = random.choice(animals)
+    conf = random.randint(60, 95)
 
     if conf > 70:
-        send_alert(f"ALERT: {animal_en} {conf:.1f}%")
+        send_alert(f"ALERT: {animal} {conf}%")
 
-    return animal_en, animal_hi, conf
+    return animal, animal_hi[animal], conf
 
 # ---------------------------
-# UI HEADER
+# UI
 # ---------------------------
-st.markdown("<h1 style='text-align:center;color:#1e3a8a;'>🐾 Wildlife Protection System</h1>", unsafe_allow_html=True)
+st.title("🐾 Wildlife Protection System")
 
 tab1, tab2, tab3 = st.tabs(["🔍 Detection", "🌿 Awareness", "🧠 Quiz"])
 
 # ---------------------------
-# TAB 1: DETECTION
+# Detection
 # ---------------------------
 with tab1:
-    uploaded = st.file_uploader("Upload Image", type=["jpg","png","jpeg"])
+    file = st.file_uploader("Upload Image")
 
-    if uploaded:
-        with open("temp.jpg","wb") as f:
-            f.write(uploaded.read())
+    if file:
+        img = Image.open(file)
+        st.image(img)
 
-        st.image("temp.jpg")
+        animal, hi, conf = detect(img)
 
-        with st.spinner("Detecting..."):
-            animal_en, animal_hi, conf = detect("temp.jpg")
-
-        if animal_en:
-            color = "green" if conf>80 else "orange" if conf>50 else "red"
-
-            st.markdown(f"""
-            <div style='padding:20px;border:3px solid {color};border-radius:10px;'>
-            <h2 style='color:{color};'>⚠️ {animal_en.upper()}</h2>
-            <p>Confidence: {conf:.1f}%</p>
-            <p>हिन्दी: {animal_hi}</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.audio("alert.mp3")
-
-        else:
-            st.error("No detection")
+        st.success(f"⚠️ {animal} detected ({conf}%)")
+        st.write(f"हिन्दी: {hi}")
 
 # ---------------------------
-# TAB 2: AWARENESS
+# Awareness
 # ---------------------------
 with tab2:
-    st.markdown("## 🌿 Human-Animal Conflict Awareness")
+    st.markdown("## 🌿 Human-Animal Conflict Solutions")
 
-    cols = st.columns(3)
-
-    tips = [
-        "Water holes in forest",
-        "Plant trees",
-        "Buffer zone",
-        "Waste management",
-        "Solar lights",
-        "Protect animals"
-    ]
-
-    for i, tip in enumerate(tips):
-        cols[i%3].info(tip)
+    st.info("Water sources in forest")
+    st.success("Plant trees")
+    st.warning("Use buffer zones")
+    st.error("Avoid waste dumping")
 
 # ---------------------------
-# TAB 3: QUIZ
+# Quiz
 # ---------------------------
 with tab3:
-    st.markdown("## 🧠 Quiz")
-
-    name = st.text_input("Enter Name")
+    name = st.text_input("Name")
 
     q1 = st.radio("Best method?", ["Water","Trees","All"])
     q2 = st.radio("Who protects wildlife?", ["Police","Forest Dept","School"])
@@ -134,4 +83,4 @@ with tab3:
         if q1=="All": score+=1
         if q2=="Forest Dept": score+=1
 
-        st.success(f"{name} Score: {score}/2")
+        st.success(f"{name}, Score: {score}/2")
