@@ -40,7 +40,7 @@ animal_name_hi = {
 # Prediction Function
 # ---------------------------
 def predict(image_path):
-    results = model.predict(source=image_path, verbose=False)
+    results = model.predict(source=image_path, verbose=False, save=True, project="runs", name="detect")
     result = results[0]
 
     if result.probs is None:
@@ -65,34 +65,53 @@ st.set_page_config(page_title="Wildlife Detection System", layout="wide")
 
 st.markdown("<h1 style='text-align:center;'>🐾 Wildlife Detection System 2026</h1>", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+tab1, tab2 = st.tabs(["📷 Upload Photo", "🎥 Live Camera"])
 
-if uploaded_file is not None:
-    # Save temp file
-    with open("temp.jpg", "wb") as f:
-        f.write(uploaded_file.read())
+# ---- Tab 1: Upload Photo ----
+with tab1:
+    uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+    if uploaded_file is not None:
+        with open("temp.jpg", "wb") as f:
+            f.write(uploaded_file.read())
 
-    # Show full image on screen
-    st.image("temp.jpg", caption="Uploaded Image", use_column_width=True)
+        st.image("temp.jpg", caption="Uploaded Image", use_column_width=True)
 
-    # Run prediction
-    animal_en, animal_hi, conf = predict("temp.jpg")
+        animal_en, animal_hi, conf = predict("temp.jpg")
 
-    if animal_en:
-        st.markdown(f"## ⚠️ ALERT: {animal_en.upper()}")
-        st.write(f"Confidence: **{conf:.1f}%**")
-        st.write(f"**हिन्दी:** यह {animal_hi} हो सकता है।")
+        if animal_en:
+            st.markdown(f"## ⚠️ ALERT: {animal_en.upper()}")
+            st.write(f"Confidence: **{conf:.1f}%**")
+            st.write(f"**हिन्दी:** यह {animal_hi} हो सकता है।")
 
-        # Play alarm audio
-        st.audio("alert.mp3", autoplay=True)
+            st.audio("alert.mp3", autoplay=True)
 
-        # Optional: Show detection video (if you want to display YOLO inference video)
-        # Save video output
-        model.predict(source="temp.jpg", save=True, project="runs", name="detect")
-        video_path = "runs/detect/predict/temp.jpg"  # YOLO saves annotated image/video
+            # Show annotated detection result
+            det_path = "runs/detect/predict/temp.jpg"
+            if os.path.exists(det_path):
+                st.image(det_path, caption="Detection Result", use_column_width=True)
+        else:
+            st.error("❌ Detection failed.")
 
-        if os.path.exists(video_path):
-            st.image(video_path, caption="Detection Result", use_column_width=True)
+# ---- Tab 2: Live Camera ----
+with tab2:
+    camera_input = st.camera_input("Take a snapshot")
+    if camera_input is not None:
+        with open("live.jpg", "wb") as f:
+            f.write(camera_input.getbuffer())
 
-    else:
-        st.error("❌ Detection failed.")
+        st.image("live.jpg", caption="Live Snapshot", use_column_width=True)
+
+        animal_en, animal_hi, conf = predict("live.jpg")
+
+        if animal_en:
+            st.markdown(f"## ⚠️ ALERT: {animal_en.upper()}")
+            st.write(f"Confidence: **{conf:.1f}%**")
+            st.write(f"**हिन्दी:** यह {animal_hi} हो सकता है।")
+
+            st.audio("alert.mp3", autoplay=True)
+
+            det_path = "runs/detect/predict/live.jpg"
+            if os.path.exists(det_path):
+                st.image(det_path, caption="Detection Result", use_column_width=True)
+        else:
+            st.error("❌ Detection failed.")
