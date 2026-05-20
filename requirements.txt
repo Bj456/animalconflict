@@ -1,7 +1,3 @@
 streamlit
-ultralytics
-torch
-torchvision
 Pillow
 requests
-opencv-python-headless
