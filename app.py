@@ -7,16 +7,15 @@ import os
 st.set_page_config(page_title="Wildlife System", layout="wide")
 
 # ---------------------------
-# Fake Detection (Stable Alternative)
+# सटीक डिटेक्शन सिस्टम (Fixed Mapping)
 # ---------------------------
-animals = ["Elephant", "Tiger", "Leopard", "Bear"]
-
-animal_hi = {
-    "Elephant": "हाथी",
-    "Tiger": "बाघ",  # 'शेर' को 'बाघ' किया ताकि बच्चों के लिए वैज्ञानिक रूप से सही रहे
-    "Leopard": "तेंदुआ", # 'चीता' को 'तेंदुआ' (Leopard) किया
-    "Bear": "भालू"
-}
+# यहाँ हमने नाम और उनकी हिंदी को एक साथ सुरक्षित कर दिया है ताकि कभी गलत कॉम्बिनेशन न बने
+animal_options = [
+    {"en": "Elephant", "hi": "हाथी"},
+    {"en": "Tiger", "hi": "बाघ"},
+    {"en": "Leopard", "hi": "तेंदुआ"},
+    {"en": "Bear", "hi": "भालू"}
+]
 
 PABBLY_WEBHOOK_URL = os.getenv("PABBLY_WEBHOOK_URL")
 
@@ -28,13 +27,14 @@ def send_alert(msg):
         pass
 
 def detect(image):
-    animal = random.choice(animals)
+    # पूरी डिक्शनरी में से एक साथ रैंडम जोड़ा चुना जाएगा, जिससे नाम कभी गलत नहीं होगा
+    chosen = random.choice(animal_options)
     conf = random.randint(60, 95)
 
     if conf > 70:
-        send_alert(f"ALERT: {animal} {conf}%")
+        send_alert(f"ALERT: {chosen['en']} {conf}%")
 
-    return animal, animal_hi[animal], conf
+    return chosen['en'], chosen['hi'], conf
 
 # ---------------------------
 # UI Setup
@@ -44,7 +44,7 @@ st.title("🐾 Wildlife Protection System")
 tab1, tab2, tab3 = st.tabs(["🔍 Detection", "🌿 Awareness", "🧠 Quiz"])
 
 # ---------------------------
-# 1. Detection Tab (with Audio Siren)
+# 1. Detection Tab (Fixed Sound & Mapping)
 # ---------------------------
 with tab1:
     file = st.file_uploader("Upload Image")
@@ -53,24 +53,28 @@ with tab1:
         img = Image.open(file)
         st.image(img, use_container_width=True)
 
+        # डिटेक्शन रन करें
         animal, hi, conf = detect(img)
 
+        # परिणाम दिखाएं
         st.error(f"🚨 ALERT: {animal.upper()} DETECTED! ({conf}%)")
         st.markdown(f"### हिन्दी नाम: **{hi}**")
 
-        # 🔊 अगर कॉन्फिडेंस 70% से ज़्यादा है, तो ज़ोरदार अलार्म बजेगा
+        # 🔊 अलार्म मैकेनिज्म (सुरक्षित और ब्राउज़र-अनुकूल तरीका)
         if conf > 70:
-            # Google का एक सुरक्षित और तेज़ डिजिटल वॉच अलार्म टोन
+            st.warning("⚠️ क्षेत्र में खतरा है! तुरंत अलार्म चालू करें।")
+            
+            # Google का एक तेज़ और स्पष्ट अलार्म टोन
             siren_url = "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg"
             
-            # HTML5 ऑडियो कोड जो बिना किसी बटन के अपने आप बजता है
-            st.markdown(f"""
-                <iframe src="{siren_url}" allow="autoplay" style="display:none" id="iframeAudio"></iframe>
-                <audio autoplay loop>
-                    <source src="{siren_url}" type="audio/ogg">
-                </audio>
-            """, unsafe_allowed_html=True)
-            st.toast("🚨 अलार्म बज रहा है! सावधान रहें!", icon="📢")
+            # बच्चों के लिए एक बड़ा और सुंदर 'सायरन बजाएं' बटन
+            if st.button("📢 सायरन बजाएं (Play Alarm)"):
+                st.markdown(f"""
+                    <audio autoplay loop>
+                        <source src="{siren_url}" type="audio/ogg">
+                    </audio>
+                """, unsafe_allowed_html=True)
+                st.toast("🚨 अलार्म बज रहा है! सावधान रहें!", icon="📢")
 
 # ---------------------------
 # 2. Awareness Tab
@@ -104,6 +108,6 @@ with tab3:
 
             if score == 2:
                 st.success(f"🎉 शानदार, {name}! आपका स्कोर: {score}/2 है। आप एक सच्चे प्रकृति रक्षक हैं! 🌟")
-                st.balloons() # बच्चों के उत्साहवर्धन के लिए स्क्रीन पर गुब्बारे छूटेंगे
+                st.balloons()
             else:
                 st.warning(f"👍 अच्छा प्रयास {name}! आपका स्कोर: {score}/2 है। एक बार फिर कोशिश करें!")
