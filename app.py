@@ -23,19 +23,17 @@ if "armed" not in st.session_state:
     st.session_state.armed = False
 
 # -------------------------
-# SYSTEM ARM BUTTON
+# SYSTEM READY BUTTON
 # -------------------------
 if not st.session_state.armed:
 
     st.error("🔴 SYSTEM NOT READY")
 
     if st.button("🟢 ACTIVATE SYSTEM"):
-
         st.session_state.armed = True
         st.rerun()
 
 else:
-
     st.success("🟢 SYSTEM READY")
 
 # -------------------------
@@ -43,7 +41,7 @@ else:
 # -------------------------
 @st.cache_resource
 def load_model():
-    return YOLO("yolov8n.pt")
+    return YOLO("yolov8n-cls.pt")
 
 model = load_model()
 
@@ -51,20 +49,21 @@ model = load_model()
 # HINDI LABELS
 # -------------------------
 animal_map = {
-    "elephant": "हाथी",
+    "tiger": "बाघ",
     "bear": "भालू",
-    "zebra": "ज़ेब्रा",
-    "giraffe": "जिराफ",
-    "cow": "गाय",
+    "boar": "जंगली सूअर",
+    "elephant": "हाथी",
     "dog": "कुत्ता",
+    "cow": "गाय",
+    "horse": "घोड़ा",
     "cat": "बिल्ली"
 }
 
 danger_animals = [
-    "elephant",
+    "tiger",
     "bear",
-    "zebra",
-    "giraffe"
+    "boar",
+    "elephant"
 ]
 
 # -------------------------
@@ -75,15 +74,12 @@ PABBLY_WEBHOOK_URL = os.getenv("PABBLY_WEBHOOK_URL")
 def send_alert(message):
 
     try:
-
         if PABBLY_WEBHOOK_URL:
-
             requests.post(
                 PABBLY_WEBHOOK_URL,
                 json={"message": message},
                 timeout=5
             )
-
             print("✅ Alert Sent")
 
     except Exception as e:
@@ -103,34 +99,30 @@ def detect_animal(image):
 
         results = model(tmp.name)
 
-    detected_name = None
-    confidence = 0
+    probs = results[0].probs
 
-    for r in results:
+    if probs is None:
+        return None, 0
 
-        boxes = r.boxes
+    top1 = probs.top1
+    confidence = float(probs.top1conf) * 100
 
-        if boxes is not None and len(boxes) > 0:
+    animal = model.names[top1].lower()
 
-            confs = boxes.conf.cpu().numpy()
-            classes = boxes.cls.cpu().numpy()
+    # LOW CONFIDENCE REJECT
+    if confidence < 55:
+        return None, confidence
 
-            max_index = confs.argmax()
-
-            confidence = float(confs[max_index]) * 100
-
-            cls_id = int(classes[max_index])
-
-            detected_name = model.names[cls_id].lower()
-
-            break
-
-    return detected_name, confidence
+    return animal, confidence
 
 # -------------------------
 # AUTO ALARM
 # -------------------------
 def autoplay_audio(file_path):
+
+    if not os.path.exists(file_path):
+        st.error("alarm.mp3 file missing")
+        return
 
     with open(file_path, "rb") as f:
         data = f.read()
@@ -178,13 +170,10 @@ if uploaded_file:
             f"### हिन्दी नाम: {hindi_name}"
         )
 
-        # -------------------------
         # DANGER ALERT
-        # -------------------------
         if (
             st.session_state.armed
             and animal in danger_animals
-            and confidence > 40
         ):
 
             st.error("🚨 DANGER ALERT 🚨")
@@ -193,7 +182,6 @@ if uploaded_file:
                 f"{animal.upper()} detected"
             )
 
-            # AUTO PLAY SOUND
             autoplay_audio("alarm.mp3")
 
             st.warning(
@@ -201,9 +189,9 @@ if uploaded_file:
             )
 
         else:
-
-            st.info("✅ No danger animal")
+            st.info("✅ Non-danger animal")
 
     else:
-
-        st.warning("❌ No animal detected")
+        st.warning(
+            f"❌ Animal not confidently detected"
+        )
