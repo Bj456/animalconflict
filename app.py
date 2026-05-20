@@ -1,167 +1,277 @@
 import streamlit as st
-from ultralytics import YOLO
 from PIL import Image
-import numpy as np
-import cv2
 import requests
 import os
-import time
+from ultralytics import YOLO
+import tempfile
 
-# -----------------------------------
-# PAGE
-# -----------------------------------
-st.set_page_config(
-    page_title="Wildlife Protection System",
-    layout="wide"
-)
+# ---------------------------
+# PAGE CONFIG
+# ---------------------------
+st.set_page_config(page_title="Wildlife Protection System", layout="wide")
 
 st.title("🐾 Wildlife Protection System")
 
-# -----------------------------------
-# MODEL LOAD
-# -----------------------------------
+# ---------------------------
+# LOAD YOLO MODEL
+# ---------------------------
 @st.cache_resource
 def load_model():
     return YOLO("yolov8n.pt")
 
 model = load_model()
 
-# -----------------------------------
-# ANIMAL LIST
-# -----------------------------------
-danger_animals = [
-    "elephant",
-    "bear",
-    "zebra",
-    "giraffe",
-    "cow",
-    "dog",
-    "cat",
-    "horse"
-]
-
-hindi_names = {
+# ---------------------------
+# ANIMAL LABELS
+# ---------------------------
+animal_map = {
     "elephant": "हाथी",
     "bear": "भालू",
-    "zebra": "ज़ेबरा",
+    "zebra": "ज़ेब्रा",
     "giraffe": "जिराफ",
     "cow": "गाय",
     "dog": "कुत्ता",
     "cat": "बिल्ली",
-    "horse": "घोड़ा"
+    "horse": "घोड़ा",
+    "sheep": "भेड़"
 }
 
-# -----------------------------------
-# PABBLY
-# -----------------------------------
+danger_animals = [
+    "elephant",
+    "bear",
+    "zebra",
+    "giraffe"
+]
+
+# ---------------------------
+# PABBLY ALERT
+# ---------------------------
 PABBLY_WEBHOOK_URL = os.getenv("PABBLY_WEBHOOK_URL")
 
-def send_alert(msg):
+def send_alert(message):
     try:
         if PABBLY_WEBHOOK_URL:
             requests.post(
                 PABBLY_WEBHOOK_URL,
-                json={"message": msg},
+                json={"message": message},
                 timeout=5
             )
-            print("✅ ALERT SENT")
-    except:
-        pass
+            print("✅ Alert sent")
+    except Exception as e:
+        print(e)
 
-# -----------------------------------
-# FILE UPLOAD
-# -----------------------------------
-uploaded_file = st.file_uploader(
-    "📸 Upload Image",
-    type=["jpg", "jpeg", "png"]
+# ---------------------------
+# DETECTION FUNCTION
+# ---------------------------
+def detect_animal(image):
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+        image.save(tmp.name)
+
+        results = model(tmp.name)
+
+    detected_name = None
+    confidence = 0
+
+    for r in results:
+        boxes = r.boxes
+
+        if boxes is not None and len(boxes) > 0:
+
+            confs = boxes.conf.cpu().numpy()
+            classes = boxes.cls.cpu().numpy()
+
+            max_index = confs.argmax()
+
+            confidence = float(confs[max_index]) * 100
+
+            cls_id = int(classes[max_index])
+
+            detected_name = model.names[cls_id].lower()
+
+            break
+
+    return detected_name, confidence
+
+# ---------------------------
+# TABS
+# ---------------------------
+tab1, tab2, tab3 = st.tabs(
+    ["🔍 Detection", "🌿 Awareness", "🧠 Quiz"]
 )
 
-# -----------------------------------
-# DETECTION
-# -----------------------------------
-if uploaded_file:
+# =========================================================
+# DETECTION TAB
+# =========================================================
+with tab1:
 
-    image = Image.open(uploaded_file)
-
-    st.image(
-        image,
-        width='stretch'
+    uploaded_file = st.file_uploader(
+        "📤 Upload Animal Image",
+        type=["jpg", "jpeg", "png"]
     )
 
-    st.info("🔍 Detecting animals...")
+    if uploaded_file:
 
-    img_array = np.array(image)
+        image = Image.open(uploaded_file)
 
-    # YOLO DETECTION
-    results = model(img_array)
+        st.image(image, width='stretch')
 
-    detected = False
+        with st.spinner("🔍 Detecting Animal..."):
 
-    for result in results:
+            animal, confidence = detect_animal(image)
 
-        boxes = result.boxes
+        # ---------------------------
+        # RESULT
+        # ---------------------------
+        if animal:
 
-        for box in boxes:
+            hindi_name = animal_map.get(animal, "अज्ञात")
 
-            cls_id = int(box.cls[0])
+            st.success(
+                f"✅ Detected: {animal.upper()} ({confidence:.1f}%)"
+            )
 
-            conf = float(box.conf[0])
+            st.markdown(
+                f"### हिन्दी नाम: **{hindi_name}**"
+            )
 
-            label = model.names[cls_id]
-
-            if label in danger_animals and conf > 0.40:
-
-                detected = True
-
-                hindi = hindi_names.get(label, label)
+            # ---------------------------
+            # DANGER ALERT
+            # ---------------------------
+            if animal in danger_animals and confidence > 40:
 
                 st.error(
-                    f"🚨 {label.upper()} DETECTED ({round(conf*100,2)}%)"
+                    "🚨 खतरा! जंगली जानवर पाया गया!"
                 )
 
-                st.markdown(f"## हिन्दी नाम: {hindi}")
-
-                # ALERT
+                # Send webhook
                 send_alert(
-                    f"🚨 ALERT: {label} detected"
+                    f"🚨 ALERT: {animal.upper()} detected with {confidence:.1f}% confidence"
                 )
 
-                # -----------------------------------
-                # AUTO SOUND
-                # -----------------------------------
+                # ---------------------------
+                # AUTO PLAY SIREN
+                # ---------------------------
+                # IMPORTANT:
+                # Streamlit browsers block autoplay sometimes.
+                # THIS JS forces play automatically.
+                # ---------------------------
 
-                alarm_url = "https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3"
+                st.components.v1.html(
+                    """
+                    <html>
+                    <body>
 
-                st.markdown(
-                    f"""
-                    <audio autoplay>
-                    <source src="{alarm_url}" type="audio/mpeg">
+                    <audio id="alarm" autoplay loop>
+                        <source src="https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3" type="audio/mp3">
                     </audio>
 
                     <script>
-                    var audio = document.getElementsByTagName("audio")[0];
-                    audio.play();
+                    var audio = document.getElementById("alarm");
+
+                    function playAudio() {
+                        audio.play();
+                    }
+
+                    playAudio();
+
+                    document.addEventListener('click', function() {
+                        audio.play();
+                    });
+
                     </script>
+
+                    <h1 style="color:red;text-align:center;">
+                    🚨 DANGER ALERT 🚨
+                    </h1>
+
+                    </body>
+                    </html>
                     """,
-                    unsafe_allow_html=True
+                    height=200,
                 )
 
-                st.success("🔊 Alarm Triggered")
+                st.warning(
+                    "🔊 यदि आवाज़ न आए तो स्क्रीन पर एक बार क्लिक करें।"
+                )
 
-    if detected == False:
-        st.success("✅ No dangerous animal detected")
+            else:
 
-# -----------------------------------
-# AWARENESS
-# -----------------------------------
-st.divider()
+                st.info("✅ कोई खतरनाक जानवर नहीं मिला")
 
-st.header("🌿 Awareness")
+        else:
 
-st.info("💧 जंगलों में पानी की व्यवस्था करें")
+            st.warning("❌ कोई जानवर detect नहीं हुआ")
 
-st.success("🌳 पेड़ लगाएं")
+# =========================================================
+# AWARENESS TAB
+# =========================================================
+with tab2:
 
-st.warning("🚧 Buffer zone बनाएं")
+    st.markdown("## 🌿 Human-Animal Conflict Solutions")
 
-st.error("🚯 जंगलों में कचरा न फैलाएं")
+    st.info(
+        "💧 जंगलों में पानी की व्यवस्था करें ताकि जानवर गांवों में न आएं।"
+    )
+
+    st.success(
+        "🌳 जंगलों में फलदार पेड़ लगाएं।"
+    )
+
+    st.warning(
+        "🚧 सोलर फेंसिंग और बफर ज़ोन का उपयोग करें।"
+    )
+
+    st.error(
+        "🚯 खुले में भोजन और कचरा न फेंकें।"
+    )
+
+# =========================================================
+# QUIZ TAB
+# =========================================================
+with tab3:
+
+    st.markdown("## 🧠 Wildlife Quiz")
+
+    name = st.text_input("👦 विद्यार्थी का नाम")
+
+    q1 = st.radio(
+        "वन्यजीवों को गांव में आने से कैसे रोक सकते हैं?",
+        [
+            "जंगल में पानी रखना",
+            "पेड़ लगाना",
+            "दोनों"
+        ]
+    )
+
+    q2 = st.radio(
+        "वन्यजीव सुरक्षा कौन करता है?",
+        [
+            "पुलिस",
+            "वन विभाग",
+            "विद्यालय"
+        ]
+    )
+
+    if st.button("📤 Submit Quiz"):
+
+        if not name:
+
+            st.warning("⚠️ नाम लिखें")
+
+        else:
+
+            score = 0
+
+            if q1 == "दोनों":
+                score += 1
+
+            if q2 == "वन विभाग":
+                score += 1
+
+            st.success(
+                f"🎉 {name} आपका स्कोर: {score}/2"
+            )
+
+            if score == 2:
+                st.balloons()
