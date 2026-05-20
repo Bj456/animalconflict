@@ -3,13 +3,19 @@ from PIL import Image
 import random
 import requests
 import os
-
-st.set_page_config(page_title="Wildlife System", layout="wide")
+import time
 
 # ---------------------------
-# सटीक डिटेक्शन सिस्टम (Fixed Mapping)
+# PAGE CONFIG
 # ---------------------------
-# यहाँ हमने नाम और उनकी हिंदी को एक साथ सुरक्षित कर दिया है ताकि कभी गलत कॉम्बिनेशन न बने
+st.set_page_config(
+    page_title="Wildlife Protection System",
+    layout="wide"
+)
+
+# ---------------------------
+# ANIMAL DATA
+# ---------------------------
 animal_options = [
     {"en": "Elephant", "hi": "हाथी"},
     {"en": "Tiger", "hi": "बाघ"},
@@ -17,97 +23,190 @@ animal_options = [
     {"en": "Bear", "hi": "भालू"}
 ]
 
+# ---------------------------
+# PABBLY
+# ---------------------------
 PABBLY_WEBHOOK_URL = os.getenv("PABBLY_WEBHOOK_URL")
 
 def send_alert(msg):
     try:
         if PABBLY_WEBHOOK_URL:
-            requests.post(PABBLY_WEBHOOK_URL, json={"message": msg}, timeout=5)
-    except:
-        pass
-
-def detect(image):
-    # पूरी डिक्शनरी में से एक साथ रैंडम जोड़ा चुना जाएगा, जिससे नाम कभी गलत नहीं होगा
-    chosen = random.choice(animal_options)
-    conf = random.randint(60, 95)
-
-    if conf > 70:
-        send_alert(f"ALERT: {chosen['en']} {conf}%")
-
-    return chosen['en'], chosen['hi'], conf
+            requests.post(
+                PABBLY_WEBHOOK_URL,
+                json={"message": msg},
+                timeout=5
+            )
+            print("✅ Alert sent")
+    except Exception as e:
+        print("❌ Alert error:", e)
 
 # ---------------------------
-# UI Setup
+# FAKE AI DETECTION
+# ---------------------------
+def detect(image):
+
+    # DEMO ONLY
+    chosen = random.choice(animal_options)
+
+    # confidence realistic
+    conf = random.randint(72, 97)
+
+    if conf > 75:
+        send_alert(f"🚨 ALERT: {chosen['en']} detected with {conf}% confidence")
+
+    return chosen["en"], chosen["hi"], conf
+
+# ---------------------------
+# TITLE
 # ---------------------------
 st.title("🐾 Wildlife Protection System")
 
-tab1, tab2, tab3 = st.tabs(["🔍 Detection", "🌿 Awareness", "🧠 Quiz"])
+# ---------------------------
+# TABS
+# ---------------------------
+tab1, tab2, tab3 = st.tabs([
+    "🔍 Detection",
+    "🌿 Awareness",
+    "🧠 Quiz"
+])
 
-# ---------------------------
-# 1. Detection Tab (Fixed Sound & Mapping)
-# ---------------------------
+# =========================================================
+# DETECTION TAB
+# =========================================================
 with tab1:
-    file = st.file_uploader("Upload Image")
 
-    if file:
-        img = Image.open(file)
+    st.header("📸 Animal Detection")
+
+    uploaded_file = st.file_uploader(
+        "Upload Wildlife Image",
+        type=["jpg", "jpeg", "png"]
+    )
+
+    if uploaded_file is not None:
+
+        img = Image.open(uploaded_file)
+
         st.image(img, use_container_width=True)
 
-        # डिटेक्शन रन करें
+        # processing animation
+        with st.spinner("🔍 Detecting Animal..."):
+            time.sleep(2)
+
         animal, hi, conf = detect(img)
 
-        # परिणाम दिखाएं
-        st.error(f"🚨 ALERT: {animal.upper()} DETECTED! ({conf}%)")
-        st.markdown(f"### हिन्दी नाम: **{hi}**")
+        # RESULTS
+        st.error(f"🚨 {animal.upper()} DETECTED")
 
-        # 🔊 अलार्म मैकेनिज्म (सुरक्षित और ब्राउज़र-अनुकूल तरीका)
-        if conf > 70:
-            st.warning("⚠️ क्षेत्र में खतरा है! तुरंत अलार्म चालू करें।")
-            
-            # Google का एक तेज़ और स्पष्ट अलार्म टोन
-            siren_url = "https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg"
-            
-            # बच्चों के लिए एक बड़ा और सुंदर 'सायरन बजाएं' बटन
-            if st.button("📢 सायरन बजाएं (Play Alarm)"):
-                st.markdown(f"""
-                    <audio autoplay loop>
-                        <source src="{siren_url}" type="audio/ogg">
-                    </audio>
-                """, unsafe_allowed_html=True)
-                st.toast("🚨 अलार्म बज रहा है! सावधान रहें!", icon="📢")
+        st.markdown(f"""
+        ### 📊 Confidence: `{conf}%`
 
-# ---------------------------
-# 2. Awareness Tab
-# ---------------------------
+        ### 🇮🇳 हिन्दी नाम:
+        ## {hi}
+        """)
+
+        # ---------------------------------------
+        # ALARM SECTION
+        # ---------------------------------------
+        if conf > 75:
+
+            st.warning("⚠️ खतरा detected! Alarm auto-play करने की कोशिश की जा रही है...")
+
+            # PUBLIC MP3
+            alarm_url = "https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3"
+
+            # AUTOPLAY AUDIO
+            audio_html = f"""
+            <audio autoplay controls>
+                <source src="{alarm_url}" type="audio/mpeg">
+            </audio>
+
+            <script>
+            var audio = document.getElementsByTagName('audio')[0];
+            audio.play();
+            </script>
+            """
+
+            st.markdown(
+                audio_html,
+                unsafe_allow_html=True
+            )
+
+            st.success("🔊 Alarm Triggered")
+
+# =========================================================
+# AWARENESS TAB
+# =========================================================
 with tab2:
-    st.markdown("## 🌿 Human-Animal Conflict Solutions")
-    st.markdown("ग्रामीण और पर्वतीय क्षेत्रों में मानव-वन्यजीव संघर्ष को रोकने के उपाय:")
 
-    st.info("💧 **Water sources in forest:** जंगलों के भीतर प्राकृतिक जलस्रोतों (नौले/धारे) का पुनरुद्धार ताकि जानवर पानी के लिए आबादी में न आएं।")
-    st.success("🌳 **Plant trees:** वनों में फलदार और स्थानीय चौड़ी पत्ती वाले पौधों का रोपण करना।")
-    st.warning("🚧 **Use buffer zones:** कृषि भूमि और घने जंगलों के बीच एक सुरक्षित बफर ज़ोन या सोलर फेंसिंग का उपयोग।")
-    st.error("🚯 **Avoid waste dumping:** बस्तियों के आस-पास खुले में कचरा और जूठा भोजन न फेंकना, जिससे भालू और तेंदुए आकर्षित होते हैं।")
+    st.header("🌿 Human-Wildlife Conflict Solutions")
 
-# ---------------------------
-# 3. Quiz Tab
-# ---------------------------
+    st.info(
+        "💧 जंगलों में जल स्रोत बढ़ाने चाहिए ताकि जानवर गांवों की ओर न आएं।"
+    )
+
+    st.success(
+        "🌳 अधिक पेड़ लगाएं और प्राकृतिक आवास बचाएं।"
+    )
+
+    st.warning(
+        "🚧 जंगल और गांव के बीच buffer zone बनाना चाहिए।"
+    )
+
+    st.error(
+        "🚯 खुले में भोजन और कचरा न फेंकें।"
+    )
+
+# =========================================================
+# QUIZ TAB
+# =========================================================
 with tab3:
-    st.markdown("## 🧠 बाल वैज्ञानिक क्विज़ (Life Skills & Nature)")
-    name = st.text_input("विद्यार्थी का नाम दर्ज करें:")
 
-    q1 = st.radio("वन्यजीवों को आबादी में आने से रोकने का सबसे अच्छा तरीका क्या है?", ["जंगल में पानी की व्यवस्था", "फलदार पेड़ लगाना", "उपरोक्त सभी"])
-    q2 = st.radio("हमारे जंगलों और वन्यजीवों की सुरक्षा मुख्य रूप से कौन करता है?", ["पुलिस", "वन विभाग (Forest Dept)", "विद्यालय"])
+    st.header("🧠 Wildlife Quiz")
 
-    if st.button("जमा करें (Submit Score)"):
-        if not name:
-            st.warning("कृपया पहले अपना नाम लिखें!")
+    student_name = st.text_input("विद्यार्थी का नाम लिखें")
+
+    q1 = st.radio(
+        "वन्यजीव संघर्ष रोकने का सबसे अच्छा तरीका?",
+        [
+            "जंगल में पानी",
+            "पेड़ लगाना",
+            "उपरोक्त सभी"
+        ]
+    )
+
+    q2 = st.radio(
+        "वन्यजीवों की सुरक्षा कौन करता है?",
+        [
+            "पुलिस",
+            "वन विभाग",
+            "विद्यालय"
+        ]
+    )
+
+    if st.button("Submit Quiz"):
+
+        if student_name == "":
+            st.warning("पहले नाम लिखें")
         else:
+
             score = 0
-            if q1 == "उपरोक्त सभी": score += 1
-            if q2 == "वन विभाग (Forest Dept)": score += 1
+
+            if q1 == "उपरोक्त सभी":
+                score += 1
+
+            if q2 == "वन विभाग":
+                score += 1
 
             if score == 2:
-                st.success(f"🎉 शानदार, {name}! आपका स्कोर: {score}/2 है। आप एक सच्चे प्रकृति रक्षक हैं! 🌟")
+
+                st.success(
+                    f"🎉 शानदार {student_name} ! आपका स्कोर {score}/2 है"
+                )
+
                 st.balloons()
+
             else:
-                st.warning(f"👍 अच्छा प्रयास {name}! आपका स्कोर: {score}/2 है। एक बार फिर कोशिश करें!")
+
+                st.warning(
+                    f"👍 अच्छा प्रयास {student_name} ! स्कोर {score}/2"
+                )
